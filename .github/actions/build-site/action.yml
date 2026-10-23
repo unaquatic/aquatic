@@ -1,0 +1,47 @@
+name: Build Site
+description: Assemble the static site under site, aquatic.dev's page at its root, flow's landing page under flow, and the catalog browser with the catalog's latest release under catalog
+
+runs:
+  using: composite
+  steps:
+    # The pages are one self-contained file each, with the type16 font and
+    # the landing page's terminal frames embedded, so the site holds them as
+    # they are committed. The worker serves site at aquatic.dev, and GitHub
+    # Pages publishes it as the project site.
+    - name: Assemble Site
+      shell: bash
+      run: |
+        rm -rf site
+        mkdir -p site/flow site/catalog
+        cp index.html site/
+        cp cmd/landing/index.html site/flow/
+        cp cmd/catalog/index.html site/catalog/
+        for page in site/index.html site/flow/index.html site/catalog/index.html; do
+          grep -q 'url(data:font/ttf;base64,' "$page" || { echo "$page embeds no type16 font" >&2; exit 1; }
+        done
+        grep -q '<script type="text/plain" id="demo-frames">' site/flow/index.html || { echo "site/flow/index.html holds no demo frames" >&2; exit 1; }
+
+    # The catalog's latest release holds the catalog, joined into one
+    # catalog.json, and its JSON Schema. The browser fetches the relative
+    # catalog.json, so it works under /catalog/, where flow reads
+    # catalog.json (gateway.DefaultSource); schema.json is the catalog's
+    # "$schema", gateway.SchemaURL.
+    - name: Add Catalog
+      shell: bash
+      run: |
+        repo=https://github.com/unaquatic/catalog
+        echo "catalog: $(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' "$repo/releases/latest")"
+        for f in catalog.json schema.json; do
+          curl -fsSL --retry 3 "$repo/releases/latest/download/$f" -o "site/catalog/$f"
+        done
+        printf '%s\n' \
+          '/catalog/catalog.json' \
+          '  Cache-Control: public, max-age=300' \
+          '  Access-Control-Allow-Origin: *' \
+          '/catalog/schema.json' \
+          '  Content-Type: application/schema+json' \
+          '  Cache-Control: public, max-age=300' \
+          '  Access-Control-Allow-Origin: *' \
+          > site/_headers
+        jq -e '.version and (.models | length > 0)' site/catalog/catalog.json > /dev/null
+        [ "$(jq -r '."$schema"' site/catalog/catalog.json)" = "$(jq -r '."$id"' site/catalog/schema.json)" ]

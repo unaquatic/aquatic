@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flow logo</title>
+<style>
+body { background: #111; color: #ddd; font: 14px/1.5 -apple-system, sans-serif; margin: 0; display: flex; }
+nav { position: sticky; top: 0; height: 100vh; overflow: auto; width: 300px; flex: none; padding: 16px;
+  box-sizing: border-box; border-right: 1px solid #2a2a2a; font-size: 12px; }
+nav h4 { margin: 12px 0 4px; color: #888; font-weight: 500; }
+nav h4:first-child { margin-top: 0; }
+main { padding: 8px 24px 48px; min-width: 0; flex: 1; }
+h1 { font-size: 18px; }
+h2 { font-size: 15px; margin: 28px 0 8px; }
+small { color: #888; font-weight: 400; }
+button, input[type=text] { background: #1b1b1b; color: #ddd; border: 1px solid #333; border-radius: 0; font: inherit; }
+button { padding: 5px 8px; cursor: pointer; }
+button:hover { border-color: #555; }
+button.on { color: #9cc4ff; border-color: #9cc4ff; }
+button.link { background: none; border: none; padding: 0; color: #9cc4ff; font-size: 12px; }
+input[type=range], input[type=checkbox] { accent-color: #9cc4ff; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.row { display: grid; grid-template-columns: 84px 1fr 40px; align-items: center; gap: 8px; padding: 2px 0; }
+.row input[type=range] { width: 100%; margin: 0; }
+.row output { font: 12px ui-monospace, Menlo, monospace; color: #888; text-align: right; }
+.color { display: flex; align-items: center; gap: 6px; grid-column: 2 / 4; min-width: 0; }
+.color input[type=checkbox] { margin: 0; }
+.color input[type=color] { width: 24px; height: 24px; padding: 0; flex: none; border: 1px solid #444; border-radius: 0;
+  background: none; cursor: pointer; }
+.color input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.color input[type=color]::-webkit-color-swatch { border: none; border-radius: 0; }
+.color input[type=text] { flex: 1; width: 0; padding: 3px 6px; font: 12px ui-monospace, Menlo, monospace; }
+.color.off input[type=color], .color.off input[type=text] { opacity: .4; }
+.note { color: #888; margin: 6px 0 0; }
+.seg { display: flex; margin-bottom: 8px; }
+/* Neighbors share a border by overlapping; the hovered and the selected
+   button draw on top, so that their whole border shows. */
+.seg button { position: relative; }
+.seg button + button { margin-left: -1px; }
+.seg button:hover { z-index: 1; }
+.seg button.on { z-index: 2; }
+.stage { display: inline-block; max-width: 100%; overflow: auto; padding: 24px; border: 1px solid #2a2a2a; }
+.stage.dark { background: #0d1117; }
+.stage.light { background: #fff; }
+.stage.checker { background: repeating-conic-gradient(#222 0% 25%, #1a1a1a 0% 50%) 0 0 / 16px 16px; }
+.stage svg { display: block; }
+.error { color: #ff7b72; font: 12px ui-monospace, Menlo, monospace; white-space: pre-wrap; margin: 8px 0 0; }
+details { font-size: 12px; margin-top: 4px; }
+pre { background: #1a1a1a; padding: 8px; overflow: auto; margin: 0; font: 12px/1.45 ui-monospace, Menlo, monospace; }
+#cmd { white-space: pre-wrap; word-break: break-all; }
+</style>
+<nav>
+<h4>Size</h4>
+<div class="row"><label for="scale">Scale</label><input type="range" id="scale" min="1" max="32" step="1"><output for="scale" data-unit="px"></output></div>
+<div class="row"><label for="px">Padding x</label><input type="range" id="px" min="0" max="8" step="0.5"><output for="px"></output></div>
+<div class="row"><label for="py">Padding y</label><input type="range" id="py" min="0" max="8" step="0.5"><output for="py"></output></div>
+
+<h4>Colors</h4>
+<div class="row"><label for="fg-hex">Logo</label>
+  <div class="color" id="fg"><input type="color" id="fg-pick"><input type="text" id="fg-hex" spellcheck="false"></div></div>
+<div class="row"><label for="accent-on">Accent</label>
+  <div class="color" id="accent"><input type="checkbox" id="accent-on"><input type="color" id="accent-pick"><input type="text" id="accent-hex" spellcheck="false"></div></div>
+<div class="row"><label for="letter">Accent letter</label><input type="range" id="letter" min="1" max="12" step="1"><output for="letter"></output></div>
+<div class="row"><label for="bg-on">Background</label>
+  <div class="color" id="bg"><input type="checkbox" id="bg-on"><input type="color" id="bg-pick"><input type="text" id="bg-hex" spellcheck="false"></div></div>
+<div class="row"><label for="radius">Corner radius</label><input type="range" id="radius" min="0" max="8" step="0.5"><output for="radius"></output></div>
+
+<h4>Pixels</h4>
+<div class="row"><label for="gap">Gap</label><input type="range" id="gap" min="0" max="0.5" step="0.05"><output for="gap"></output></div>
+<div class="row"><label for="round">Roundness</label><input type="range" id="round" min="0" max="0.5" step="0.05"><output for="round"></output></div>
+<p class="note">A gap or roundness draws every pixel on its own. Without them the logo is one outline, which shows no seams at any size.</p>
+
+<h4>Shadow</h4>
+<div class="row"><label for="shadow-on">Color</label>
+  <div class="color" id="shadow"><input type="checkbox" id="shadow-on"><input type="color" id="shadow-pick"><input type="text" id="shadow-hex" spellcheck="false"></div></div>
+<div class="row"><label for="shadow-x">Offset x</label><input type="range" id="shadow-x" min="-3" max="3" step="0.5"><output for="shadow-x"></output></div>
+<div class="row"><label for="shadow-y">Offset y</label><input type="range" id="shadow-y" min="-3" max="3" step="0.5"><output for="shadow-y"></output></div>
+<p class="note">Lengths other than scale are in logo pixels. Keep padding x and y at least the shadow's offset x and y, or the image cuts the shadow off.</p>
+</nav>
+<main>
+<h1>flow logo <small>cmd/logo · product.Logo</small></h1>
+<div class="actions">
+  <button id="download">Download SVG</button>
+  <button id="copy-svg">Copy SVG</button>
+  <button id="reset">Reset</button>
+</div>
+
+<h2>Preview <small id="dims"></small></h2>
+<div class="seg" id="backdrop">
+  <button data-backdrop="dark" class="on">GitHub dark</button>
+  <button data-backdrop="light">GitHub light</button>
+  <button data-backdrop="checker">Checker</button>
+</div>
+<div class="stage dark" id="stage"><div id="preview"></div></div>
+<p class="error" id="error"></p>
+
+<h2>Command <button class="link" id="copy-cmd">copy</button></h2>
+<pre id="cmd"></pre>
+<details><summary>svg source</summary><pre id="src"></pre></details>
+</main>
+
+<script>
+"use strict";
+
+// The options with range controls, and the color options. A color with a
+// toggle can be empty, which the toggle turns off; its fallback fills the
+// picker meanwhile.
+const ranges = ["scale", "px", "py", "letter", "radius", "gap", "round", "shadow-x", "shadow-y"];
+const colors = {
+  fg: { toggle: false, fallback: "#e6e6e6" },
+  accent: { toggle: true, fallback: "#f5c66e" },
+  bg: { toggle: true, fallback: "#1c1c1c" },
+  shadow: { toggle: true, fallback: "#000000" },
+};
+const hex6 = /^#[0-9a-f]{6}$/i;
+const el = (id) => document.getElementById(id);
+
+let defaults = {};
+let svgText = "";
+let pending = null;
+let queued = false;
+
+// values returns the options the controls show, by flag name.
+function values() {
+  const v = {};
+  for (const name of ranges) v[name] = el(name).value;
+  for (const [name, c] of Object.entries(colors)) {
+    const on = !c.toggle || el(name + "-on").checked;
+    v[name] = on ? el(name + "-hex").value.trim() : "";
+  }
+  return v;
+}
+
+// setValues shows the options v in the controls.
+function setValues(v) {
+  for (const name of ranges) el(name).value = v[name];
+  for (const [name, c] of Object.entries(colors)) {
+    const value = v[name] || "";
+    if (c.toggle) el(name + "-on").checked = value !== "";
+    const shown = value || c.fallback;
+    el(name + "-hex").value = shown;
+    if (hex6.test(shown)) el(name + "-pick").value = shown;
+  }
+}
+
+// syncControls updates the value labels and dims the colors turned off.
+function syncControls() {
+  for (const out of document.querySelectorAll("output")) {
+    out.textContent = el(out.htmlFor.value).value + (out.dataset.unit || "");
+  }
+  for (const [name, c] of Object.entries(colors)) {
+    el(name).classList.toggle("off", c.toggle && !el(name + "-on").checked);
+  }
+}
+
+// sameValue reports whether two option values are equal, as numbers when
+// both are numbers.
+function sameValue(a, b) {
+  if (a === b) return true;
+  const x = Number(a), y = Number(b);
+  return a !== "" && b !== "" && !Number.isNaN(x) && !Number.isNaN(y) && x === y;
+}
+
+// quote quotes s for a POSIX shell when it needs quoting.
+function quote(s) {
+  return /^[A-Za-z0-9._\/-]+$/.test(s) ? s : "'" + s.replaceAll("'", "'\\''") + "'";
+}
+
+// command returns the command that writes the image v describes, naming only
+// the options that differ from their defaults.
+function command(v) {
+  const args = ["go run ./cmd/logo"];
+  for (const [name, value] of Object.entries(v)) {
+    if (!sameValue(value, defaults[name])) args.push(`-${name} ${quote(value)}`);
+  }
+  args.push("-o logo.svg");
+  return args.join(" ");
+}
+
+// render fetches the image the controls describe and shows it.
+async function render() {
+  syncControls();
+  const v = values();
+  const query = new URLSearchParams(v).toString();
+  history.replaceState(null, "", "#" + query);
+  el("cmd").textContent = command(v);
+  pending?.abort();
+  pending = new AbortController();
+  try {
+    const res = await fetch("/logo.svg?" + query, { signal: pending.signal });
+    const text = await res.text();
+    if (!res.ok) {
+      el("error").textContent = text.trim();
+      return;
+    }
+    el("error").textContent = "";
+    svgText = text;
+    el("preview").innerHTML = text;
+    el("src").textContent = text;
+    const svg = el("preview").firstElementChild;
+    el("dims").textContent = `${svg.getAttribute("width")} × ${svg.getAttribute("height")} px · ${new Blob([text]).size} bytes`;
+  } catch (err) {
+    if (err.name !== "AbortError") el("error").textContent = String(err);
+  }
+}
+
+// schedule renders once on the next frame, however many inputs arrive.
+function schedule() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => {
+    queued = false;
+    render();
+  });
+}
+
+// flash briefly shows text on button.
+function flash(button, text) {
+  const was = button.textContent;
+  button.textContent = text;
+  setTimeout(() => { button.textContent = was; }, 1200);
+}
+
+for (const name of ranges) el(name).addEventListener("input", schedule);
+for (const [name, c] of Object.entries(colors)) {
+  const pick = el(name + "-pick"), hex = el(name + "-hex");
+  const turnOn = () => { if (c.toggle) el(name + "-on").checked = true; };
+  pick.addEventListener("input", () => { hex.value = pick.value; turnOn(); schedule(); });
+  hex.addEventListener("input", () => {
+    if (hex6.test(hex.value.trim())) pick.value = hex.value.trim();
+    turnOn();
+    schedule();
+  });
+  if (c.toggle) el(name + "-on").addEventListener("change", schedule);
+}
+
+for (const button of el("backdrop").querySelectorAll("button")) {
+  button.addEventListener("click", () => {
+    for (const b of el("backdrop").querySelectorAll("button")) b.classList.toggle("on", b === button);
+    el("stage").className = "stage " + button.dataset.backdrop;
+  });
+}
+
+el("reset").addEventListener("click", () => { setValues(defaults); render(); });
+el("copy-svg").addEventListener("click", async (e) => {
+  await navigator.clipboard.writeText(svgText);
+  flash(e.target, "Copied");
+});
+el("copy-cmd").addEventListener("click", async (e) => {
+  await navigator.clipboard.writeText(el("cmd").textContent);
+  flash(e.target, "Copied");
+});
+el("download").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+  a.download = "logo.svg";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+// The page starts from the defaults, with the options in its URL fragment,
+// which every change rewrites, over them. It drops saved names that are no
+// option, such as pad, which px and py replaced.
+(async () => {
+  defaults = await (await fetch("/defaults.json")).json();
+  const saved = Object.fromEntries([...new URLSearchParams(location.hash.slice(1))].filter(([name]) => name in defaults));
+  setValues({ ...defaults, ...saved });
+  render();
+})();
+</script>
+</html>
