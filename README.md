@@ -12,7 +12,7 @@
   <a href="https://github.com/unaquatic/aquatic/blob/main/LICENSE"><img src="https://img.shields.io/github/license/unaquatic/aquatic?labelColor=888&color=555&style=flat-square" alt="License"></a>
 </p>
 
-<p align="center"><b>Aquatic's website, aquatic.dev, with flow's landing page, the browser of flow's model catalog, and the tool that draws the logos of flow, fluid and sqlite, written in golang.</b></p>
+<p align="center"><b>The website of aquatic.dev, written in golang.</b></p>
 
 ---
 
