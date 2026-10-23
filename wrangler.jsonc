@@ -1,0 +1,20 @@
+// aquatic.dev's page at https://aquatic.dev/, flow's landing page at
+// https://aquatic.dev/flow/, and the catalog browser, cmd/catalog, with the
+// catalog's latest catalog.json at https://aquatic.dev/catalog/, as a worker of static assets alone. The
+// Build Site action assembles site, as the route serves it; a request for
+// /flow or /catalog redirects to /flow/ or /catalog/, where the catalog
+// page's relative fetch of catalog.json resolves. The route takes every
+// path of aquatic.dev.
+{
+  "name": "aquatic",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./site",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "routes": [
+    { "pattern": "aquatic.dev/*", "zone_name": "aquatic.dev" }
+  ]
+}

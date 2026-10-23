@@ -1,0 +1,88 @@
+name: Release
+
+run-name: Release ${{ inputs.ref || github.sha }}
+
+# Release tags a commit as the next semantic version, vX.Y.Z, which
+# next-version.sh picks from the commit's Conventional Commits type, creates
+# a GitHub release of the version with the commit's message as its notes,
+# and deploys the site. A commit released before is deployed again, not
+# tagged again.
+on:
+  workflow_dispatch:
+
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit to release, or empty for the triggering commit"
+        type: string
+        default: ""
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.tag.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Tag And Release
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if tag=$(git tag --points-at HEAD --list 'v[0-9]*' | head -1) && [ -n "$tag" ]; then
+            echo "$sha is released already as $tag"
+            exit 0
+          fi
+          prev=$(git tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname | head -1)
+          tag=$(git log -1 --format=%B HEAD | .github/scripts/next-version.sh "$prev")
+          echo "releasing $sha as $tag, after ${prev:-no version}"
+
+          {
+            echo "## Changes"
+            echo
+            git log -1 --format=%B HEAD
+          } > notes.md
+
+          gh release create "$tag" \
+            --target "$sha" --title "$tag" --notes-file notes.md --latest
+
+  # GitHub Pages needs a public repository on the free plan; set the
+  # repository variable PAGES to true once it is public.
+  deploy-pages:
+    name: Deploy Pages
+    needs: release
+    if: vars.PAGES == 'true'
+    uses: ./.github/workflows/pages-deploy.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    secrets: inherit
+
+  deploy-workers:
+    name: Deploy Workers
+    needs: release
+    uses: ./.github/workflows/workers-build.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}
+    secrets: inherit

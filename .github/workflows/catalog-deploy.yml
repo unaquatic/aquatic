@@ -1,0 +1,59 @@
+name: Catalog Deploy
+
+# The catalog, unaquatic/catalog, releases a new version as often as every
+# six hours, and the site serves its latest release's catalog.json under
+# /catalog/, with the browser, as the Build Site action assembles them. Every
+# hour this deploys the site again when the catalog.json at aquatic.dev
+# differs from the latest release's.
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: catalog-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      stale: ${{ steps.compare.outputs.stale }}
+    steps:
+      - name: Compare
+        id: compare
+        run: |
+          latest=$(curl -fsSL --retry 3 https://github.com/unaquatic/catalog/releases/latest/download/catalog.json | sha256sum)
+          live=$(curl -fsSL --retry 3 https://aquatic.dev/catalog/catalog.json | sha256sum) || live=none
+          if [ "$latest" = "$live" ]; then
+            echo "aquatic.dev serves the latest catalog"
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "aquatic.dev serves another catalog than the latest release's"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # GitHub Pages needs a public repository on the free plan; set the
+  # repository variable PAGES to true once it is public.
+  deploy-pages:
+    name: Deploy Pages
+    needs: check
+    if: needs.check.outputs.stale == 'true' && vars.PAGES == 'true'
+    uses: ./.github/workflows/pages-deploy.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    secrets: inherit
+
+  deploy-workers:
+    name: Deploy Workers
+    needs: check
+    if: needs.check.outputs.stale == 'true'
+    uses: ./.github/workflows/workers-build.yml
+    secrets: inherit

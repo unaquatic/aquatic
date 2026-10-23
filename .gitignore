@@ -4,11 +4,11 @@
 .opencode/
 .cursor
 
-# Built binaries
+# Built binaries and site
 /aquatic
-/design
 /landing
 /logo
+/site
 
 # Logs
 logs/
