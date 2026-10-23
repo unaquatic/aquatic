@@ -1,0 +1,14 @@
+# IDE
+.idea/
+.claude
+.opencode/
+.cursor
+
+# Built binaries
+/aquatic
+/design
+/landing
+/logo
+
+# Logs
+logs/
