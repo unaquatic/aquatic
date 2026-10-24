@@ -99,7 +99,8 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // falls, by standing swells with deep-water timing (w = sqrt(g k)), and is
 // shaded by Fresnel reflection of the sky, crest light through thin water and
 // haze; the shade picks one of 8 colours from Trough to Lit. Stars blink in
-// the sky over the horizon. The pointer raises a gentle swell.
+// the sky over the horizon. A click drops a ring of waves on the sea; clicks
+// add up, so many rings run, spread and cross at once.
 //
 // On it floats "aquatic" in type16's ss01, k cells a font dot. Each letter rides the
 // mean height of the water under it, so a swell runs along the word. The
@@ -118,8 +119,15 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     wordSize: 52,                              // % of the canvas width the word takes at most (72 % at least on a phone)
     waterline: 58,                             // % of the sea under the horizon, top down: where the word floats
     sink: 0,                                   // font dots of the word under calm water
-    bob: 35, swell: 45, lift: 45,              // % of the sea's rise that moves the letters, the water line; the pointer's swell moves both
+    bob: 35, swell: 45, lift: 45,              // % of the sea's rise that moves the letters, the water line; the clicks' waves move both
   };
+  // A click's waves, as a stone's: the water lifts at the spot, then runs out in
+  // a ring of crests that widens and fades. For a click at z = 2, in world units
+  // and seconds: wavelength, crest speed (the ring runs at half of it, as deep
+  // water's do), the ring's width at first and its growth a second, height;
+  // then the rise and life, and how many run at once. Farther clicks drop
+  // larger waves, so they still read.
+  const RIPPLE = { len: 1.4, speed: 1.0, width: 0.3, spread: 0.3, height: 0.3, rise: 0.15, life: 7, max: 12 };
   const SWELLS = [  // wavelength (world units, camera 1 unit above the sea), direction, spatial phase, time phase
     { len: 7.0, dir: 0.35, ph: 0.4, tp: 1.7 }, { len: 5.2, dir: 2.10, ph: 2.2, tp: 0.3 },
     { len: 3.6, dir: 1.15, ph: 4.0, tp: 2.9 }, { len: 2.6, dir: 2.75, ph: 1.1, tp: 4.4 },
@@ -168,7 +176,17 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const grid = document.createElement('canvas');
   let visible = true, last = 0;
   const t0 = performance.now(), start = Math.round(Math.random() * 1200) / 10;  // wave time (s) the page opens on
-  const pointer = { x: 0, y: 0, a: 0, on: false };
+  // the clicks on the sea: world spot, time (ms), size; and this frame's waves
+  // of each, live in W[0..nw): spot, height, wavenumber, phase, ring radius and
+  // width, and the band of distance it reaches (squared)
+  const ripples = [], W = Array.from({ length: RIPPLE.max }, () => ({ x: 0, z: 0, a: 0, k: 0, ph: 0, rc: 0, sg: 0, lo: 0, hi: 0 }));
+  let nw = 0;
+  const rs = new Float64Array(3);
+  // sin, and e^(-u²) for |u| up to the 2.5 a wave reaches, by table: the waves
+  // run for every dot, every wave, every frame
+  const TAB = 4096, TURN = TAB / (Math.PI * 2), REACH = 2.5, SIN = new Float32Array(TAB), GAUSS = new Float32Array(TAB + 1);
+  for (let i = 0; i < TAB; i++) SIN[i] = Math.sin(i / TURN);
+  for (let i = 0; i <= TAB; i++) GAUSS[i] = Math.exp(-i / TAB * REACH * REACH);
 
   // the word: k cells a font dot, its left column, the calm water line's row, its top row,
   // the depth it floats at; per word column: world x, each swell's sin, heights, water line
@@ -283,23 +301,15 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     // sun direction (toward the sun, which sits beyond the horizon)
     const el = C.sunHeight * Math.PI / 180, az = C.sunDir * Math.PI / 180;
     const Lx = Math.sin(az) * Math.cos(el), Ly = Math.sin(el), Lz = Math.cos(az) * Math.cos(el);
-    const glint = C.glint / 100 * 2.4, crest = C.crest / 100 * 0.7;
-    pointer.a += ((pointer.on ? 1 : 0) - pointer.a) * 0.06;
-    let pxw = 0, pzw = 0, bump = 0;
-    if (pointer.a > 0.01 && pointer.y > horizonY + 1) {     // pointer -> spot on the sea
-      pzw = CAM_H * F / (pointer.y - horizonY); pxw = (pointer.x - cols / 2) * pzw / F; bump = 0.3 * pointer.a;
-    }
-    const bw = 0.5 + pzw * 0.06, half = cols / 2;
-    const swellAt = (x, z) => { const dx = x - pxw, dz = (z - pzw) * 0.7; return bump * Math.exp(-(dx * dx + dz * dz) / bw); };
+    const glint = C.glint / 100 * 2.4, crest = C.crest / 100 * 0.7, half = cols / 2;
+    const lift = ripple(now), sea = rows - horizonY;
     let nt = 0;
     for (let i = 0; i < N; i++) {
       let h = 0, hx = 0, hz = 0;
       for (let j = 0; j < nk; j++) { const q = j * N + i, c = Q[q]; h += A[j] * S[q]; hx += AX[j] * c; hz += AZ[j] * c; }
       const x = wx[i], z = wz[i];
-      if (bump) {
-        const dx = x - pxw, dz = (z - pzw) * 0.7, b = bump * Math.exp(-(dx * dx + dz * dz) / bw);
-        h += b; hx += b * -2 * dx / bw; hz += b * -2 * dz * 0.7 / bw;
-      }
+      // the clicks' waves, on the dots they can lift into view (most near ones lie under the bottom edge)
+      if (nw && (CAM_H - h - lift) * F / z < sea) { rippleAt(x, z, rs); h += rs[0]; hx += rs[1]; hz += rs[2]; }
       const sx = (half + x * F / z) | 0, sy = (horizonY + (CAM_H - h) * F / z) | 0;
       if (sx < 0 || sy < 0 || sx >= cols || sy >= rows) continue;
       // surface normal n = (-hx, 1, -hz) and view direction v (point -> camera)
@@ -336,16 +346,57 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const L = lists[l];
       for (let j = 0; j < n; j++) ctx.fillRect((L[j] % cols) * cd + gap / 2, ((L[j] / cols) | 0) * cd + gap / 2, s, s);
     }
-    drawWord(A, rt, swellAt);
+    drawWord(A, rt);
   }
 
-  function drawWord(A, rt, swellAt) {
+  // Each click's waves at this moment, into W: they lift in over the rise, run
+  // out as a ring that widens, and fade out over their life; spent ones go.
+  // Returns the most they can lift the sea anywhere.
+  function ripple(now) {
+    const P = RIPPLE;
+    while (ripples.length && now - ripples[0].t > P.life * 1000) ripples.shift();
+    nw = 0;
+    let top = 0;
+    for (const r of ripples) {
+      const age = Math.max(0, now - r.t) / 1000, s = r.s, w = W[nw++], wide = P.width + P.spread * age;
+      w.x = r.x; w.z = r.z;
+      w.k = Math.PI * 2 / (P.len * s);
+      w.ph = w.k * P.speed * s * age;                 // crests run at speed...
+      w.rc = P.speed * s / 2 * age;                   // ...through a ring that runs at half of it
+      w.sg = wide * s;
+      // lifts in; lowers as the ring grows round and wide, keeping its energy; fades out
+      w.a = P.height * s * (1 - Math.exp(-age / P.rise)) * Math.sqrt(P.width / wide / (1 + w.rc / (P.len * s))) * (1 - (age / P.life) ** 2);
+      const lo = Math.max(0, w.rc - REACH * w.sg), hi = w.rc + REACH * w.sg;
+      w.lo = lo * lo; w.hi = hi * hi;
+      top += w.a;
+    }
+    return top;
+  }
+  // The clicks' waves at (x, z), added up: height, and its slope along x and z,
+  // into out. Each is h = a e^(-u²) cos(k d - ph), u = (d - rc) / sg, d the
+  // distance to its spot: crests in a ring.
+  function rippleAt(x, z, out) {
+    let h = 0, hx = 0, hz = 0;
+    for (let j = 0; j < nw; j++) {
+      const w = W[j], dx = x - w.x, dz = z - w.z, d2 = dx * dx + dz * dz;
+      if (d2 < w.lo || d2 > w.hi) continue;
+      const d = Math.sqrt(d2) + 1e-6, u = (d - w.rc) / w.sg;
+      const e = w.a * GAUSS[Math.min(TAB, u * u * (TAB / (REACH * REACH))) | 0];
+      const p = ((w.k * d - w.ph) * TURN) | 0, sn = SIN[p & (TAB - 1)], cs = SIN[(p + TAB / 4) & (TAB - 1)];
+      const g = e * (-2 * u / w.sg * cs - w.k * sn) / d;  // dh/dd, over d
+      h += e * cs; hx += g * dx; hz += g * dz;
+    }
+    out[0] = h; out[1] = hx; out[2] = hz;
+  }
+
+  function drawWord(A, rt) {
     const n = WW * k, nk = K.length, toRows = F / z0, R = 8 * k;
-    // the water under each column: the swells and the pointer's swell, and where its line falls
+    // the water under each column: the swells and the clicks' waves, and where its line falls
     for (let c = 0; c < n; c++) {
       let h = 0;
       for (let j = 0; j < nk; j++) h += A[j] * WS[j * n + c];
-      HW[c] = h; HB[c] = swellAt(WX[c], z0);
+      HW[c] = h; HB[c] = 0;
+      if (nw) { rippleAt(WX[c], z0, rs); HB[c] = rs[0]; }
       WL[c] = wl0 + Math.round(-(h * C.swell + HB[c] * C.lift) / 100 * toRows);
     }
     // each letter rides the mean of the water under it
@@ -410,11 +461,16 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function loop(now) { frame(now); if (!reduce) requestAnimationFrame(loop); }
 
-  cv.addEventListener('pointermove', (e) => {
-    const r = cv.getBoundingClientRect();
-    pointer.x = (e.clientX - r.left) / cell; pointer.y = (e.clientY - r.top) / cell; pointer.on = true;
+  // a click (a tap, a pen) drops waves at the spot of the sea under it, sized for
+  // its distance; past RIPPLE.max at once, the oldest go
+  cv.addEventListener('pointerdown', (e) => {
+    if (reduce || e.button) return;
+    const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / cell, y = (e.clientY - r.top) / cell;
+    if (y <= horizonY + 1) return;
+    const z = CAM_H * F / (y - horizonY);
+    ripples.push({ x: (x - cols / 2) * z / F, z, t: performance.now(), s: Math.min(3, Math.max(0.6, Math.sqrt(z / 2))) });
+    if (ripples.length > RIPPLE.max) ripples.shift();
   });
-  cv.addEventListener('pointerleave', () => { pointer.on = false; });
 
   new IntersectionObserver((es) => { visible = es.some((e) => e.isIntersecting); }).observe(cv);
   fit();
